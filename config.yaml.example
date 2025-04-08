@@ -1,0 +1,48 @@
+# Server Configuration
+ollama:
+  host: "http://localhost:11434"  # Ollama server address
+  timeout: 30  # Request timeout in seconds
+
+# API Keys
+api_keys:
+  gemini: "YOUR_GEMINI_API_KEY"  # Replace with your Gemini API key
+
+# Storage Configuration
+storage:
+  transcriptions_dir: "transcriptions"  # Directory for saving transcriptions
+  max_file_size_mb: 100  # Maximum allowed file size in MB
+  allowed_audio_formats:
+    - mp3
+    - wav
+    - m4a
+    - ogg
+    - flac
+  allowed_video_formats:
+    - mp4
+    - mov
+    - avi
+    - mpeg
+    - mkv
+
+# Processing Configuration
+processing:
+  default_whisper_model: "large"  # Default Whisper model size
+  default_chunk_length_ms: 29000  # Default audio chunk size in milliseconds
+  max_workers: 4  # Number of parallel workers for transcription
+  default_language: ""  # Default language code (empty for auto-detection)
+
+# Analysis Configuration
+analysis:
+  default_method: "ollama"  # Default analysis method (none/ollama/gemini)
+  save_analysis_results: true  # Whether to save analysis results
+  default_prompts:
+    summary: "You are a helpful assistant who summarizes text. Please produce a concise, structured summary in clear paragraphs."
+    tasks: "Based on the summary provided, create a list of actionable tasks for the team. Format each task with priority (High/Medium/Low), estimated effort (in hours), and clear description."
+    key_points: "Extract the key discussion points and decisions from the text. Format them as bullet points with categories."
+
+# UI Configuration
+ui:
+  show_debug_info: false  # Show debug information in the UI
+  show_model_stats: true  # Show model statistics (parameters, VRAM requirements)
+  theme: "light"  # UI theme (light/dark/auto)
+  max_text_display_length: 10000  # Maximum text length to display in UI 
