@@ -13,7 +13,8 @@ A powerful Streamlit application that combines OpenAI's Whisper models for audio
   - **Medium** (769M parameters): Better accuracy, good for multiple languages, ~5GB VRAM
   - **Large** (1.5B parameters): Best accuracy, production quality, ~10GB VRAM
 - Automatic language detection or forced language mode
-- Parallel processing of audio chunks for improved performance
+- **Voice Activity Detection (VAD)**: Use Silero VAD to split audio based on speech segments, improving accuracy by avoiding splits in the middle of sentences.
+- Parallel processing of audio segments for improved performance
 - Video audio extraction support
 
 ### Analysis
@@ -27,9 +28,11 @@ When using Ollama or Gemini, the tool performs three analysis steps:
 1. **Summary Generation**: Creates a concise, structured summary
 2. **Task Extraction**: Generates actionable tasks with priorities and effort estimates
 3. **Key Points**: Identifies main discussion points and decisions
+4. **Hallucination Detection**: Verifies factual consistency between the summary and the raw transcription, flagging potential inconsistencies.
 
 ### Additional Features
 - Customizable analysis prompts for each step
+- **Text-to-Speech (TTS)**: Listen to generated summaries using high-quality AI voices.
 - Adjustable audio chunk size for memory optimization
 - Progress indicators and detailed feedback
 - Download options for both raw transcription and analysis results
