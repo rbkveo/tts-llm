@@ -16,6 +16,7 @@ from silero_vad import load_silero_vad, get_speech_timestamps
 import edge_tts
 import asyncio
 import aiofiles
+from jinja2 import Environment, FileSystemLoader
 
 # Optional: Suppress some warnings for cleaner console
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -63,6 +64,18 @@ def load_vad_model():
 
 vad_model = load_vad_model()
 
+# --- Jinja2 Environment Setup ---
+template_env = Environment(loader=FileSystemLoader("templates"))
+
+def render_template(template_name: str, **kwargs) -> str:
+    """Render a Jinja2 template with given variables"""
+    try:
+        template = template_env.get_template(template_name)
+        return template.render(**kwargs)
+    except Exception as e:
+        st.error(f"Template error ({template_name}): {e}")
+        return ""
+
 # Initialize Gemini (will be configured with API key later)
 def init_gemini(api_key: str):
     """Initialize Gemini with the provided API key"""
@@ -99,89 +112,70 @@ def perform_multi_step_analysis(
     
     if analysis_type == "none":
         return results
-        
-    # Define default prompts if not provided
-    if system_prompts is None:
-        system_prompts = {
-            "summary": (
-                "You are a helpful assistant who summarizes text. "
-                "Please produce a concise, structured summary in clear paragraphs."
-            ),
-            "tasks": (
-                "Based on the summary provided, create a list of actionable tasks "
-                "for the team. Format each task with priority (High/Medium/Low), "
-                "estimated effort (in hours), and clear description."
-            ),
-            "key_points": (
-                "Extract the key discussion points and decisions from the text. "
-                "Format them as bullet points with categories."
-            ),
-            "hallucination": (
-                "You are a factual consistency checker. Compare the following SUMMARY with the RAW TRANSCRIPTION. "
-                "Identify any specific claims, names, dates, or numbers in the SUMMARY that are NOT supported by the RAW TRANSCRIPTION. "
-                "If everything is consistent, respond with 'PASS'. If there are hallucinations, list them clearly."
-            )
-        }
 
     try:
         # Step 1: Generate Summary
+        summary_prompt = render_template("summary_prompt.jinja2", transcription=text)
         if analysis_type == "ollama":
             results["summary"] = summarize_text_with_ollama(
                 text=text,
                 model_name=model_name,
-                system_prompt=system_prompts["summary"]
+                system_prompt=summary_prompt
             )
         else:  # gemini
             results["summary"] = analyze_with_gemini(
                 text=text,
                 model=gemini_model,
-                system_prompt=system_prompts["summary"]
+                system_prompt=summary_prompt
             )
 
         # Step 2: Generate Tasks (based on summary)
         if results["summary"]:
+            tasks_prompt = render_template("tasks_prompt.jinja2", summary=results["summary"])
             if analysis_type == "ollama":
                 results["tasks"] = summarize_text_with_ollama(
                     text=results["summary"],
                     model_name=model_name,
-                    system_prompt=system_prompts["tasks"]
+                    system_prompt=tasks_prompt
                 )
             else:  # gemini
                 results["tasks"] = analyze_with_gemini(
                     text=results["summary"],
                     model=gemini_model,
-                    system_prompt=system_prompts["tasks"]
+                    system_prompt=tasks_prompt
                 )
 
         # Step 3: Extract Key Points
         if results["summary"]:
+            key_points_prompt = render_template("key_points_prompt.jinja2", summary=results["summary"])
             if analysis_type == "ollama":
                 results["key_points"] = summarize_text_with_ollama(
                     text=results["summary"],
                     model_name=model_name,
-                    system_prompt=system_prompts["key_points"]
+                    system_prompt=key_points_prompt
                 )
             else:  # gemini
                 results["key_points"] = analyze_with_gemini(
                     text=results["summary"],
                     model=gemini_model,
-                    system_prompt=system_prompts["key_points"]
+                    system_prompt=key_points_prompt
                 )
 
         # Step 4: Hallucination Detection
         if results["summary"]:
-            hallucination_prompt = f"RAW TRANSCRIPTION:\n{text}\n\nSUMMARY:\n{results['summary']}"
+            hallucination_prompt_sys = render_template("hallucination_prompt.jinja2", transcription=text, summary=results["summary"])
+            hallucination_input = f"RAW TRANSCRIPTION:\n{text}\n\nSUMMARY:\n{results['summary']}"
             if analysis_type == "ollama":
                 results["hallucination_check"] = summarize_text_with_ollama(
-                    text=hallucination_prompt,
+                    text=hallucination_input,
                     model_name=model_name,
-                    system_prompt=system_prompts["hallucination"]
+                    system_prompt=hallucination_prompt_sys
                 )
             else:  # gemini
                 results["hallucination_check"] = analyze_with_gemini(
-                    text=hallucination_prompt,
+                    text=hallucination_input,
                     model=gemini_model,
-                    system_prompt=system_prompts["hallucination"]
+                    system_prompt=hallucination_prompt_sys
                 )
 
     except Exception as e:
@@ -437,6 +431,60 @@ def play_tts(text: str, key: str):
         else:
             del st.session_state[state_key]
 
+# --- Voice Agent Logic ---
+def run_voice_agent(audio_data, analysis_results, analysis_type, model_name, gemini_model):
+    """Process voice agent query and return response"""
+    if audio_data is None:
+        return None
+    
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp.write(audio_data.getvalue())
+        tmp_path = tmp.name
+    
+    try:
+        # 1. Transcribe the query
+        with st.spinner("Transcribing query..."):
+            query_text = transcribe_long_audio_parallel(
+                file_path=tmp_path,
+                use_vad=False, # Faster for short queries
+                asr_pipeline=st.session_state.asr_pipeline
+            )
+        
+        if not query_text.strip():
+            return "I couldn't hear any speech. Please try again."
+        
+        st.info(f"You: {query_text}")
+        
+        # 2. Render Agent Prompt
+        agent_prompt = render_template(
+            "voice_agent_prompt.jinja2",
+            transcription=analysis_results.get("raw_text", ""),
+            summary=analysis_results.get("summary", ""),
+            tasks=analysis_results.get("tasks", ""),
+            key_points=analysis_results.get("key_points", ""),
+            query=query_text
+        )
+        
+        # 3. Generate Response
+        with st.spinner("Thinking..."):
+            if analysis_type == "ollama":
+                response = summarize_text_with_ollama(
+                    text="User is asking about the previous analysis.",
+                    model_name=model_name,
+                    system_prompt=agent_prompt
+                )
+            else: # gemini
+                response = analyze_with_gemini(
+                    text="User is asking about the previous analysis.",
+                    model=gemini_model,
+                    system_prompt=agent_prompt
+                )
+        
+        return response
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
 
 # --- Streamlit Frontend ---
 def main():
@@ -680,6 +728,27 @@ def main():
             st.subheader("Listen to Summary")
             if st.session_state.analysis_results["summary"]:
                 play_tts(st.session_state.analysis_results["summary"], "summary_global")
+
+            # Voice Agent Section
+            st.markdown("---")
+            st.subheader("Interactive Voice Agent")
+            st.write("Ask questions about the transcription or analysis results using your voice.")
+            
+            voice_query_audio = st.audio_input("Record your question")
+            
+            if voice_query_audio:
+                agent_resp = run_voice_agent(
+                    voice_query_audio,
+                    st.session_state.analysis_results,
+                    analysis_type,
+                    selected_model_name,
+                    st.session_state.gemini_model
+                )
+                
+                if agent_resp:
+                    st.markdown("### Agent Response")
+                    st.write(agent_resp)
+                    play_tts(agent_resp, "agent_response")
 
         # Download buttons
         col1, col2 = st.columns(2)
