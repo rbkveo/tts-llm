@@ -15,7 +15,6 @@ import numpy as np
 from silero_vad import load_silero_vad, get_speech_timestamps
 import edge_tts
 import asyncio
-import aiofiles
 from jinja2 import Environment, FileSystemLoader
 
 # Optional: Suppress some warnings for cleaner console
@@ -406,7 +405,7 @@ def play_tts(text: str, key: str):
     col1, col2 = st.columns([1, 4])
     
     with col1:
-        if st.button(f"🔊 Speak", key=f"tts_btn_{key}"):
+        if st.button("🔊 Speak", key=f"tts_btn_{key}"):
             with st.spinner("Generating speech..."):
                 try:
                     # Run the async TTS in a synchronous context for Streamlit

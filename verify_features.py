@@ -1,9 +1,7 @@
 import asyncio
 import os
-import torch
-from silero_vad import load_silero_vad, read_audio, get_speech_timestamps
+from silero_vad import load_silero_vad
 import edge_tts
-from pydub import AudioSegment
 
 async def test_tts():
     print("Testing TTS...")
@@ -19,7 +17,7 @@ async def test_tts():
 def test_vad_loading():
     print("Testing VAD model loading...")
     try:
-        model = load_silero_vad()
+        load_silero_vad()
         print("VAD Model loaded successfully.")
     except Exception as e:
         print(f"VAD Loading Failed: {e}")
