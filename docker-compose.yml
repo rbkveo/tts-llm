@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  tts-llm:
+    build: .
+    container_name: tts-llm
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./transcriptions:/app/transcriptions
+      - ./config.yaml:/app/config.yaml
+    restart: always
+    environment:
+      - HF_HOME=/app/.cache/huggingface
+    # Map the host's .cache to the container to avoid re-downloading models on every restart
+    # volumes:
+    #   - ~/.cache/huggingface:/app/.cache/huggingface

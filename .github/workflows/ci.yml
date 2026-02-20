@@ -1,0 +1,38 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ "main", "voice-agentic-capabilities" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install ruff
+    - name: Lint with ruff
+      run: ruff check .
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Docker Buildx
+      uses: actions/setup-buildx-action@v3
+    - name: Build Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: false
+        tags: tts-llm:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
