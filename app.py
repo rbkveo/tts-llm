@@ -327,7 +327,7 @@ def split_audio_with_vad(file_path, vad_model, threshold=0.5, min_speech_duratio
     return segments
 
 
-def transcribe_long_audio_parallel(file_path, chunk_length_ms=29000, use_vad=True, language=None, max_workers=4, asr_pipeline=None):
+def transcribe_long_audio_parallel(file_path, chunk_length_ms=29000, use_vad=True, language=None, max_workers=4, asr_pipeline=None, vad_params=None):
     """
     Splits an audio file into chunks and processes each chunk in parallel.
     Supports fixed-length chunks or VAD-based splitting.
@@ -338,7 +338,14 @@ def transcribe_long_audio_parallel(file_path, chunk_length_ms=29000, use_vad=Tru
     print(f"[TRANSCRIBE] Loading audio from {file_path} ...")
     
     if use_vad:
-        segments = split_audio_with_vad(file_path, vad_model)
+        v_params = vad_params if vad_params else {}
+        segments = split_audio_with_vad(
+            file_path, 
+            vad_model, 
+            threshold=v_params.get("threshold", 0.5),
+            min_speech_duration_ms=v_params.get("min_speech_duration_ms", 250),
+            min_silence_duration_ms=v_params.get("min_silence_duration_ms", 500)
+        )
     else:
         audio = AudioSegment.from_file(file_path)
         duration_ms = len(audio)
@@ -546,6 +553,25 @@ def main():
             help="Use Silero VAD to split audio based on speech segments instead of fixed intervals. Improves transcription accuracy by avoiding splitting mid-sentence."
         )
 
+        vad_params = {}
+        if use_vad:
+            with st.expander("VAD Configuration", expanded=False):
+                vad_params["threshold"] = st.slider(
+                    "Speech Threshold",
+                    0.1, 0.9, 0.5, 0.05,
+                    help="Threshold for speech detection. Higher values make it more strict (less likely to detect noise as speech)."
+                )
+                vad_params["min_speech_duration_ms"] = st.slider(
+                    "Min Speech Duration (ms)",
+                    100, 1000, 250, 50,
+                    help="Minimum duration of speech segments in milliseconds."
+                )
+                vad_params["min_silence_duration_ms"] = st.slider(
+                    "Min Silence Duration (ms)",
+                    100, 2000, 500, 100,
+                    help="Minimum duration of silence between speech segments in milliseconds."
+                )
+
         # Analysis Settings
         st.subheader("Analysis Settings")
         analysis_type = st.radio(
@@ -656,7 +682,8 @@ def main():
                     use_vad=use_vad,
                     language=force_language if force_language.strip() else None,
                     max_workers=4,
-                    asr_pipeline=st.session_state.asr_pipeline
+                    asr_pipeline=st.session_state.asr_pipeline,
+                    vad_params=vad_params
                 )
 
             st.success("Transcription complete!")
